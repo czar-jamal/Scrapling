@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Annotated, Any, List, Literal, Optional
 
@@ -28,6 +29,8 @@ from scrapling.fetchers import (
 )
 
 API_KEY = os.environ.get("SCRAPLING_API_KEY")
+MAX_BROWSER_CONCURRENCY = int(os.environ.get("MAX_BROWSER_CONCURRENCY", "2"))
+_browser_semaphore = asyncio.Semaphore(MAX_BROWSER_CONCURRENCY)
 
 app = FastAPI(
     title="Scrapling API",
@@ -122,9 +125,22 @@ async def _fetch(req: ScrapeRequest) -> Any:
         )
 
     if req.fetcher == "stealth":
-        async with AsyncStealthySession(
+        async with _browser_semaphore:
+            async with AsyncStealthySession(
+                headless=req.headless,
+                solve_cloudflare=req.solve_cloudflare,
+                network_idle=req.network_idle,
+                google_search=req.google_search,
+                wait=req.wait,
+                wait_selector=req.wait_selector,
+                timeout=req.timeout,
+                proxy=req.proxy,
+            ) as session:
+                return await session.fetch(req.url)
+
+    async with _browser_semaphore:
+        async with AsyncDynamicSession(
             headless=req.headless,
-            solve_cloudflare=req.solve_cloudflare,
             network_idle=req.network_idle,
             google_search=req.google_search,
             wait=req.wait,
@@ -133,17 +149,6 @@ async def _fetch(req: ScrapeRequest) -> Any:
             proxy=req.proxy,
         ) as session:
             return await session.fetch(req.url)
-
-    async with AsyncDynamicSession(
-        headless=req.headless,
-        network_idle=req.network_idle,
-        google_search=req.google_search,
-        wait=req.wait,
-        wait_selector=req.wait_selector,
-        timeout=req.timeout,
-        proxy=req.proxy,
-    ) as session:
-        return await session.fetch(req.url)
 
 
 @app.get("/health")
