@@ -104,7 +104,15 @@ def _check_api_key(provided: Optional[str]) -> None:
         )
 
 
+def _normalize_url(url: str) -> str:
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+    return url
+
+
 async def _fetch(req: ScrapeRequest) -> Any:
+    req.url = _normalize_url(req.url)
     if req.fetcher == "http":
         return await AsyncFetcher.get(
             req.url,
